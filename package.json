@@ -10,7 +10,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "tftp": "^0.1.2",
-    "dhcp": "^0.2.19"
+    "dhcp": "^0.2.19",
+    "tftp": "^0.1.2"
   }
 }

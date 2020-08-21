@@ -1,6 +1,7 @@
 {
     "tftpEnabled": true,
     "dhcpEnabled": true,
+    "apiEnabled": true,
     "tftpOptions": {
        "host": "192.168.5.1",
        "port": 69,
@@ -26,5 +27,12 @@
         "server": "192.168.5.1",
         "bootFile": "tftpboot/pxelinux.0",
         "tftpServer": "192.168.5.1"
-    }
+    },
+    "apiOptions": {
+        "host": "0.0.0.0",
+        "port": 3030
+    },
+    "logFile": "./pxeServer.log",
+    "millisecondsToKeep": 330000,
+    "bindHost": "192.168.5.1"
 }
