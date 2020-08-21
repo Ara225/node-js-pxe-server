@@ -1,0 +1,30 @@
+{
+    "tftpEnabled": true,
+    "dhcpEnabled": true,
+    "tftpOptions": {
+       "host": "192.168.5.1",
+       "port": 69,
+       "root": "G:\\tftpRoot",
+       "denyPUT": true
+    },
+    "dhcpOptions": {
+        "range": [
+            "192.168.5.2",
+            "192.168.5.254"
+        ],
+        "randomIP": true,
+        "netmask": "255.255.255.0",
+        "router": [
+            "192.168.5.1"
+        ],
+        "dns": [
+            "8.8.8.8",
+            "8.8.4.4"
+        ],
+        "hostname": "kacknup",
+        "broadcast": "192.168.5.255",
+        "server": "192.168.5.1",
+        "bootFile": "tftpboot/pxelinux.0",
+        "tftpServer": "192.168.5.1"
+    }
+}

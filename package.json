@@ -1,0 +1,16 @@
+{
+  "name": "pxeify-pxe-server",
+  "version": "1.0.0",
+  "description": "Interface for node based PXE server",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "tftp": "^0.1.2",
+    "dhcp": "^0.2.19"
+  }
+}
