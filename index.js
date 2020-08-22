@@ -9,7 +9,7 @@ var lastMessages = []
 var lastUpdate = 0;
 
 function initialize() {
-    console.log("[" + (new Date()).toISOString() + "] " + " PXE server started.");
+    logger("log", " PXE server started.");
     if (options.dhcpEnabled) {
         startDHCPServer(options.dhcpOptions)
     }
