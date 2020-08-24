@@ -1,12 +1,23 @@
+"use strict"
 var dhcp = require('dhcp');
 var tftp = require('tftp')
 var options = require('./options.json')
 var fs = require("fs")
 var http = require("http")
 const url = require('url')
-var dhcpLeases = {}
-var lastMessages = []
-var lastUpdate = 0;
+var dhcpMessageTypes = {
+    1: 'DHCPDISCOVER',
+    2: 'DHCPOFFER',
+    3: 'DHCPREQUEST',
+    4: 'DHCPDECLINE',
+    5: 'DHCPACK',
+    6: 'DHCPNAK',
+    7: 'DHCPRELEASE',
+    8: 'DHCPINFORM'
+}
+var clients = {}
+var ipMap = {}
+var majorErrors = []
 
 function initialize() {
     logger("log", " PXE server started.");
@@ -54,13 +65,17 @@ async function startAPIServer(apiOptions) {
     const server = http.createServer((req, res) => {
         if (req.method === 'GET') {
             const { pathname } = url.parse(req.url)
-            if (pathname == '/leases') {
+            if (pathname == '/clients') {
                 res.setHeader('Content-Type', 'application/json;charset=utf-8');
-                return res.end(JSON.stringify(dhcpLeases))
+                return res.end(JSON.stringify(clients))
             }
-            else if (pathname == '/messages') {
+            else if (pathname == '/errors') {
                 res.setHeader('Content-Type', 'application/json;charset=utf-8');
-                return res.end(JSON.stringify({ messages: JSON.stringify(lastMessages) }))
+                return res.end(JSON.stringify(majorErrors))
+            }
+            else if (pathname == '/ipmap') {
+                res.setHeader('Content-Type', 'application/json;charset=utf-8');
+                return res.end(JSON.stringify(ipMap))
             }
             else {
                 res.statusCode = 404
@@ -137,16 +152,45 @@ async function startDHCPServer(dhcpOptions) {
     var s = dhcp.createServer(dhcpOptions);
 
     s.on('message', function (data) {
+        if (!clients[data.chaddr]) {
+            clients[data.chaddr] = []
+        }
+        clients[data.chaddr].push(
+            {
+                date: (new Date()).toISOString(),
+                type: "DHCP Message",
+                data: dhcpMessageTypes[data.options["53"]]
+            }
+        )
         logger("debug", "DHCP message " + JSON.stringify(data.options))
     });
 
     s.on('bound', function (state) {
-        dhcpLeases = state
+        var leases = Object.keys(state)
+        for (var i = 0; i < leases.length; i++) {
+            if (!clients[leases[i]].toString().includes("DHCP address bound") && state[leases[i]].state == "BOUND") {
+                ipMap[state[leases[i]].address] = leases[i]
+                clients[leases[i]].push(
+                    {
+                        date: (new Date()).toISOString(),
+                        type: "DHCP address bound",
+                        data: state[leases[i]]
+                    }
+                )
+            }
+        }
         logger("log", "DHCP bound " + JSON.stringify(state))
     });
 
     s.on("error", function (err, data) {
-        logger("error", JSON.stringify(err) + " " + JSON.stringify(data))
+        majorErrors.push(
+            {
+                date: (new Date()).toISOString(),
+                type: "DHCP error",
+                data: JSON.stringify(err) + " " + JSON.stringify(data)
+            }
+        )
+        logger("error", "DHCP error " + JSON.stringify(err) + " " + JSON.stringify(data))
     });
     if (options.bindHost) {
         s.listen(0, options.bindHost);
@@ -159,13 +203,38 @@ async function startDHCPServer(dhcpOptions) {
 async function startTFTPServer(tftpOptions) {
     var server = tftp.createServer(tftpOptions);
     server.on("request", function (req) {
-        logger("log", "File requested. Method: " + req.method + " File: " + req.file + " Requesting IP: " + req.stats.remoteAddress)
+        if (ipMap[req.stats.remoteAddress]) {
+            clients[ipMap[req.stats.remoteAddress]].push(
+                {
+                    date: (new Date()).toISOString(),
+                    type: "TFTP request",
+                    data: { method: req.method, file: req.file }
+                }
+            )
+        }
+        logger("log", "TFTP request. Method: " + req.method + " File: " + req.file + " Requesting IP: " + req.stats.remoteAddress)
         req.on("error", function (error) {
             logger("error", "Error from the TFTP request. " + JSON.stringify(error))
+            if (ipMap[req.stats.remoteAddress]) {
+                clients[ipMap[req.stats.remoteAddress]].push(
+                    {
+                        date: (new Date()).toISOString(),
+                        type: "TFTP request failed",
+                        data: error
+                    }
+                )
+            }
         });
     });
 
     server.on("error", function (error) {
+        majorErrors.push(
+                            {
+                                date: (new Date()).toISOString(),
+                                type: "TFTP error",
+                                data: error
+                            }
+                        )
         logger("error", "Error from the main TFTP socket. " + JSON.stringify(error))
     });
     server.listen()
@@ -174,13 +243,5 @@ async function startTFTPServer(tftpOptions) {
 function logger(level, message) {
     message = "[" + (new Date()).toISOString() + "] " + message.toString()
     console[level](message)
-
-    if (((new Date()).valueOf()-lastUpdate) >= options.millisecondsToKeep || !lastMessages.length) {
-        lastMessages = [message]
-        lastUpdate = (new Date()).valueOf()
-    }
-    else {
-        lastMessages.push(message)
-    }
 }
 initialize()
