@@ -2,6 +2,7 @@
     "tftpEnabled": true,
     "dhcpEnabled": true,
     "apiEnabled": true,
+    "configurePxeLinux": true,
     "tftpOptions": {
        "host": "192.168.5.1",
        "port": 69,
@@ -32,7 +33,34 @@
         "host": "0.0.0.0",
         "port": 3030
     },
+    "pxeLinuxOptions": {
+        "location": "G:\\tftpRoot\\tftpboot\\pxelinux.cfg",
+        "configs": {
+            "default": {
+                "header": {
+                    "DEFAULT": "menu.c32",
+                    "PROMPT": 0,
+                    "MENU TITLE": "PXE Boot Menu",
+                    "TIMEOUT": 150,
+                    "TOTALTIMEOUT": 900
+                },
+                "bootOptions": [
+                    {
+                        "label": "Localboot",
+                        "menu label": "",
+                        "action": "localboot -1",
+                        "file": ""
+                    },
+                    {
+                        "label": "WindowsPE",
+                        "menu label": "Windows PE",
+                        "action": "kernel pxeboot.0 keeppxe",
+                        "file": "pxeboot.0"
+                    }
+                ]
+            }
+        }
+    },
     "logFile": "./pxeServer.log",
-    "millisecondsToKeep": 330000,
     "bindHost": "192.168.5.1"
 }

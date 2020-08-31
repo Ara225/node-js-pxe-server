@@ -5,7 +5,7 @@ var options = require('./options.json')
 var fs = require("fs")
 var http = require("http")
 const url = require('url');
-const { Console } = require('console');
+
 var dhcpMessageTypes = {
     1: 'DHCPDISCOVER',
     2: 'DHCPOFFER',
@@ -45,6 +45,12 @@ function initialize() {
     }
     else {
         logger("log", "Not starting API server as it is disabled")
+    }
+    if (options.configurePxeLinux) {
+        configurePxeLinux(options.pxeLinuxOptions)
+    }
+    else {
+        logger("log", "Not configuring PXE Linux")
     }
     // Simple setup for rotating log file. Use system to redirect output, but we can't rely on it rotating it 
     // as we could be running on Windows or Linux
@@ -165,18 +171,18 @@ async function startDHCPServer(dhcpOptions) {
     var s = dhcp.createServer(dhcpOptions);
 
     s.on('message', function (data) {
-        var options = {
+        var eventOptions = {
                            "lastEvent": "DHCP Message " + dhcpMessageTypes[data.options["53"]],
                            "mac": data.chaddr
                        }
         if (!clients[data.chaddr]) {
-            options.stage = stages[0]
+            eventOptions.stage = stages[0]
         }
         if (data.options["12"]) {
-            options.hostname = data.options["12"]
-            options.stage = stages[4]
+            eventOptions.hostname = data.options["12"]
+            eventOptions.stage = stages[4]
         }
-        addEvent(options)
+        addEvent(eventOptions)
         logger("debug", "DHCP message " + JSON.stringify(data.options))
     });
 
@@ -188,6 +194,13 @@ async function startDHCPServer(dhcpOptions) {
                 addEvent({
                     "stage": stages[1],
                     "lastEvent": "DHCP address bound",
+                    "mac": leases[i],
+                    "ip": state[leases[i]].address
+                })
+            }
+            else if (clients[leases[i]].ip && state[leases[i]].state == "BOUND") {
+                addEvent({
+                    "lastEvent": "DHCP address bound on previously contacted client",
                     "mac": leases[i],
                     "ip": state[leases[i]].address
                 })
@@ -212,12 +225,12 @@ async function startTFTPServer(tftpOptions) {
     var server = tftp.createServer(tftpOptions);
     server.on("request", function (req) {
         if (ipMap[req.stats.remoteAddress]) {
-            var options = {
+            var eventOptions = {
                 "stage": (req.file.includes("pxelinux.cfg") ? stages[2] : stages[3]),
                 "lastEvent": "File requested " + req.file,
                 "mac": ipMap[req.stats.remoteAddress],
             }
-            addEvent(options)
+            addEvent(eventOptions)
         }
         logger("log", "TFTP request. Method: " + req.method + " File: " + req.file + " Requesting IP: " + req.stats.remoteAddress)
         req.on("error", function (error) {
@@ -230,12 +243,12 @@ async function startTFTPServer(tftpOptions) {
             }
             
             if (ipMap[req.stats.remoteAddress]) {
-                var options = {
+                var eventOptions = {
                     "stage": (req.file.includes("pxelinux.cfg") ? stages[2] : stages[3]),
                     "lastEvent": "File request failed " + req.file,
                     "mac": ipMap[req.stats.remoteAddress],
                 }
-                addEvent(options)
+                addEvent(eventOptions)
             }
         });
     });
@@ -247,28 +260,59 @@ async function startTFTPServer(tftpOptions) {
     server.listen()
 }
 
-function addEvent(options) {
-    if (!clients[options.mac] && options.mac) {
-        clients[options.mac] = {
+function addEvent(eventOptions) {
+    if (!clients[eventOptions.mac] && eventOptions.mac) {
+        clients[eventOptions.mac] = {
             "stage": "",
             "lastEvent": "",
             "ip": "",
-            "osInstalling": "",
             "lastActiveDate": "",
+            "bootOption": "",
             "hostname": ""
         }
     }
-    var optionsKeys = Object.keys(options)
-    for (var i = 0; i < optionsKeys.length; i++) {
-        if (optionsKeys[i] != "mac") {
-            clients[options.mac][optionsKeys[i]] = options[optionsKeys[i]]
+    var eventOptionsKeys = Object.keys(eventOptions)
+    for (var i = 0; i < eventOptionsKeys.length; i++) {
+        if (eventOptionsKeys[i] != "mac") {
+            clients[eventOptions.mac][eventOptionsKeys[i]] = eventOptions[eventOptionsKeys[i]]
         }
     }
-    clients[options.mac]["lastActiveDate"] = (new Date()).valueOf()
+    clients[eventOptions.mac]["lastActiveDate"] = (new Date()).valueOf()
 }
 
 function logger(level, message) {
     message = "[" + (new Date()).valueOf() + "] " + message.toString()
     console[level](message)
+}
+
+function configurePxeLinux(pxeLinuxOptions) {
+    var configs = Object.keys(pxeLinuxOptions.configs)
+    var fileContents = ""
+    var keys = []
+    var header
+    var bootOptions
+    for (var config = 0; config < configs.length; config++) {
+        header = pxeLinuxOptions.configs[configs[config]].header
+        bootOptions = pxeLinuxOptions.configs[configs[config]].bootOptions
+        fileContents = ""
+        keys = Object.keys(header)
+        for (var key = 0; key < keys.length; key++) {
+            fileContents += keys[key] + " " + header[keys[key]] + "\n"
+        }
+        for (var option = 0; option < bootOptions.length; option++) {
+            if (!bootOptions[option]["label"]) {
+                logger("error", "Config option " + option.toString() + " for config " + configs[config] + " does not have a label")
+            }
+            else {
+                fileContents += "\n" + "label " + bootOptions[option]["label"] + "\n"
+                if (bootOptions[option]["menu label"]) {
+                    fileContents += "    menu label " + bootOptions[option]["menu label"] + "\n"
+                }
+                fileContents += "    " + bootOptions[option]["action"] + "\n"
+            }
+        }        
+        fs.writeFileSync(pxeLinuxOptions.location + "/" + configs[config], fileContents)
+        logger("log", "PXE Linux configuration for " + configs[config] + " generated \n" + fileContents)
+    }
 }
 initialize()
