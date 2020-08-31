@@ -4,7 +4,8 @@ var tftp = require('tftp')
 var options = require('./options.json')
 var fs = require("fs")
 var http = require("http")
-const url = require('url')
+const url = require('url');
+const { Console } = require('console');
 var dhcpMessageTypes = {
     1: 'DHCPDISCOVER',
     2: 'DHCPOFFER',
@@ -17,6 +18,13 @@ var dhcpMessageTypes = {
 }
 var clients = {}
 var ipMap = {}
+var stages = [
+                   "firstContact",
+                   "IPAssigned",
+                   "menu",
+                   "booting",
+                   "booted"
+               ]
 
 function initialize() {
     logger("log", " PXE server started.");
@@ -50,10 +58,13 @@ function initialize() {
                     })
                 }
                 
-                for (client in clients) {
-                    if ((new Date()).valueOf() - clients[client][clients[client].length].date >= 21600000) {
-                        logger("log", "Removing client " + client + " from the list as it has expired");
-                        delete clients [client]
+                var clientsKeys = Object.keys(clients)
+                for (var i = 0; i < clientsKeys.length; i++) {
+                    if ((new Date()).valueOf() - clients[clientsKeys[i]].lastActiveDate >= 21600000) {
+                        logger("log", "Removing client " + clientsKeys[i] + " from the list as it has expired");
+                        console.log(clients)
+                        delete clients[clientsKeys[i]]
+                        
                     }
                 }
             }, 21600000);
@@ -154,31 +165,32 @@ async function startDHCPServer(dhcpOptions) {
     var s = dhcp.createServer(dhcpOptions);
 
     s.on('message', function (data) {
+        var options = {
+                           "lastEvent": "DHCP Message " + dhcpMessageTypes[data.options["53"]],
+                           "mac": data.chaddr
+                       }
         if (!clients[data.chaddr]) {
-            clients[data.chaddr] = []
+            options.stage = stages[0]
         }
-        clients[data.chaddr].push(
-            {
-                date: (new Date()).valueOf(),
-                type: "DHCP Message",
-                data: {type: dhcpMessageTypes[data.options["53"]], hostname: data.options["12"]}
-            }
-        )
+        if (data.options["12"]) {
+            options.hostname = data.options["12"]
+            options.stage = stages[4]
+        }
+        addEvent(options)
         logger("debug", "DHCP message " + JSON.stringify(data.options))
     });
 
     s.on('bound', function (state) {
         var leases = Object.keys(state)
         for (var i = 0; i < leases.length; i++) {
-            if (!clients[leases[i]].toString().includes("DHCP address bound") && state[leases[i]].state == "BOUND") {
+            if (!clients[leases[i]].ip && state[leases[i]].state == "BOUND" && clients[leases[i]].ip != state[leases[i]].address) {
                 ipMap[state[leases[i]].address] = leases[i]
-                clients[leases[i]].push(
-                    {
-                        date: (new Date()).valueOf(),
-                        type: "DHCP address bound",
-                        data: state[leases[i]]
-                    }
-                )
+                addEvent({
+                    "stage": stages[1],
+                    "lastEvent": "DHCP address bound",
+                    "mac": leases[i],
+                    "ip": state[leases[i]].address
+                })
             }
         }
         logger("log", "DHCP bound " + JSON.stringify(state))
@@ -200,25 +212,30 @@ async function startTFTPServer(tftpOptions) {
     var server = tftp.createServer(tftpOptions);
     server.on("request", function (req) {
         if (ipMap[req.stats.remoteAddress]) {
-            clients[ipMap[req.stats.remoteAddress]].push(
-                {
-                    date: (new Date()).valueOf(),
-                    type: "TFTP request",
-                    data: { method: req.method, file: req.file }
-                }
-            )
+            var options = {
+                "stage": (req.file.includes("pxelinux.cfg") ? stages[2] : stages[3]),
+                "lastEvent": "File requested " + req.file,
+                "mac": ipMap[req.stats.remoteAddress],
+            }
+            addEvent(options)
         }
         logger("log", "TFTP request. Method: " + req.method + " File: " + req.file + " Requesting IP: " + req.stats.remoteAddress)
         req.on("error", function (error) {
-            logger("error", "Error from the TFTP request. " + JSON.stringify(error))
+            if (error.path){
+                logger("error", "Error from the TFTP request. " + JSON.stringify(error))
+            }
+            else {
+                logger("error", "Error from the TFTP request. " + error.name + " " + error.message +  " " +
+                (error.stack ? error.stack : "") + " " + (error.status ? error.status.toString() : ""))
+            }
+            
             if (ipMap[req.stats.remoteAddress]) {
-                clients[ipMap[req.stats.remoteAddress]].push(
-                    {
-                        date: (new Date()).valueOf(),
-                        type: "TFTP request failed",
-                        data: error
-                    }
-                )
+                var options = {
+                    "stage": (req.file.includes("pxelinux.cfg") ? stages[2] : stages[3]),
+                    "lastEvent": "File request failed " + req.file,
+                    "mac": ipMap[req.stats.remoteAddress],
+                }
+                addEvent(options)
             }
         });
     });
@@ -228,6 +245,26 @@ async function startTFTPServer(tftpOptions) {
         process.exit(2)
     });
     server.listen()
+}
+
+function addEvent(options) {
+    if (!clients[options.mac] && options.mac) {
+        clients[options.mac] = {
+            "stage": "",
+            "lastEvent": "",
+            "ip": "",
+            "osInstalling": "",
+            "lastActiveDate": "",
+            "hostname": ""
+        }
+    }
+    var optionsKeys = Object.keys(options)
+    for (var i = 0; i < optionsKeys.length; i++) {
+        if (optionsKeys[i] != "mac") {
+            clients[options.mac][optionsKeys[i]] = options[optionsKeys[i]]
+        }
+    }
+    clients[options.mac]["lastActiveDate"] = (new Date()).valueOf()
 }
 
 function logger(level, message) {
