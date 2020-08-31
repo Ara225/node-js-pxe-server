@@ -17,7 +17,6 @@ var dhcpMessageTypes = {
 }
 var clients = {}
 var ipMap = {}
-var majorErrors = []
 
 function initialize() {
     logger("log", " PXE server started.");
@@ -50,6 +49,13 @@ function initialize() {
                         logger("error", "Error rotating log file " + JSON.stringify(err))
                     })
                 }
+                
+                for (client in clients) {
+                    if ((new Date()).valueOf() - clients[client][clients[client].length].date >= 21600000) {
+                        logger("log", "Removing client " + client + " from the list as it has expired");
+                        delete clients [client]
+                    }
+                }
             }, 21600000);
         }
         else {
@@ -68,10 +74,6 @@ async function startAPIServer(apiOptions) {
             if (pathname == '/clients') {
                 res.setHeader('Content-Type', 'application/json;charset=utf-8');
                 return res.end(JSON.stringify(clients))
-            }
-            else if (pathname == '/errors') {
-                res.setHeader('Content-Type', 'application/json;charset=utf-8');
-                return res.end(JSON.stringify(majorErrors))
             }
             else if (pathname == '/ipmap') {
                 res.setHeader('Content-Type', 'application/json;charset=utf-8');
@@ -157,9 +159,9 @@ async function startDHCPServer(dhcpOptions) {
         }
         clients[data.chaddr].push(
             {
-                date: (new Date()).toISOString(),
+                date: (new Date()).valueOf(),
                 type: "DHCP Message",
-                data: dhcpMessageTypes[data.options["53"]]
+                data: {type: dhcpMessageTypes[data.options["53"]], hostname: data.options["12"]}
             }
         )
         logger("debug", "DHCP message " + JSON.stringify(data.options))
@@ -172,7 +174,7 @@ async function startDHCPServer(dhcpOptions) {
                 ipMap[state[leases[i]].address] = leases[i]
                 clients[leases[i]].push(
                     {
-                        date: (new Date()).toISOString(),
+                        date: (new Date()).valueOf(),
                         type: "DHCP address bound",
                         data: state[leases[i]]
                     }
@@ -183,14 +185,8 @@ async function startDHCPServer(dhcpOptions) {
     });
 
     s.on("error", function (err, data) {
-        majorErrors.push(
-            {
-                date: (new Date()).toISOString(),
-                type: "DHCP error",
-                data: JSON.stringify(err) + " " + JSON.stringify(data)
-            }
-        )
-        logger("error", "DHCP error " + JSON.stringify(err) + " " + JSON.stringify(data))
+        logger("error", "DHCP error " + JSON.stringify(err) + " " + (data ? JSON.stringify(data) : "")  + " Exiting")
+        process.exit(1)
     });
     if (options.bindHost) {
         s.listen(0, options.bindHost);
@@ -206,7 +202,7 @@ async function startTFTPServer(tftpOptions) {
         if (ipMap[req.stats.remoteAddress]) {
             clients[ipMap[req.stats.remoteAddress]].push(
                 {
-                    date: (new Date()).toISOString(),
+                    date: (new Date()).valueOf(),
                     type: "TFTP request",
                     data: { method: req.method, file: req.file }
                 }
@@ -218,7 +214,7 @@ async function startTFTPServer(tftpOptions) {
             if (ipMap[req.stats.remoteAddress]) {
                 clients[ipMap[req.stats.remoteAddress]].push(
                     {
-                        date: (new Date()).toISOString(),
+                        date: (new Date()).valueOf(),
                         type: "TFTP request failed",
                         data: error
                     }
@@ -228,20 +224,14 @@ async function startTFTPServer(tftpOptions) {
     });
 
     server.on("error", function (error) {
-        majorErrors.push(
-                            {
-                                date: (new Date()).toISOString(),
-                                type: "TFTP error",
-                                data: error
-                            }
-                        )
-        logger("error", "Error from the main TFTP socket. " + JSON.stringify(error))
+        logger("error", "Error from the main TFTP socket. " + JSON.stringify(error) + " Exiting")
+        process.exit(2)
     });
     server.listen()
 }
 
 function logger(level, message) {
-    message = "[" + (new Date()).toISOString() + "] " + message.toString()
+    message = "[" + (new Date()).valueOf() + "] " + message.toString()
     console[level](message)
 }
 initialize()
