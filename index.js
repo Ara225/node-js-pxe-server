@@ -267,7 +267,6 @@ function addEvent(eventOptions) {
             "lastEvent": "",
             "ip": "",
             "lastActiveDate": "",
-            "bootOption": "",
             "hostname": ""
         }
     }
@@ -281,7 +280,7 @@ function addEvent(eventOptions) {
 }
 
 function logger(level, message) {
-    message = "[" + (new Date()).valueOf() + "] " + message.toString()
+    message = "[" + (new Date()).valueOf() + "]  " + level.toUpperCase() + ": " + message.toString()
     console[level](message)
 }
 
