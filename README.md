@@ -1,0 +1,10 @@
+![Preview Image](header.PNG)
+# Overview
+A simple CLI-based JavaScript PXE server implemented with node.js. Working on refactoring the code to make it more widely usable.  Feedback or contributions welcome.
+
+# Features
+* No platform specific code - should run anywhere node.js can. Can be compiled to native code with pkg
+* A REST API for getting client PC details, can be disabled
+* JSON configuration files
+* Can configure a PXE Linux install
+* Run at CLI or import with require
