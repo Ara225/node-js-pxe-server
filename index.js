@@ -28,18 +28,8 @@ var stages = [
 
 function initialize() {
     logger("log", " PXE server started.");
-    if (options.dhcpEnabled) {
-        startDHCPServer(options.dhcpOptions)
-    }
-    else {
-        logger("log", "Not starting DHCP server as it is disabled")
-    }
-    if (options.tftpEnabled) {
-        startTFTPServer(options.tftpOptions)
-    }
-    else {
-        logger("log", "Not starting TFTP server as it is disabled")
-    }
+    startDHCPServer(options.dhcpOptions);
+    startTFTPServer(options.tftpOptions);
     if (options.apiEnabled) {
         startAPIServer(options.apiOptions)
     }

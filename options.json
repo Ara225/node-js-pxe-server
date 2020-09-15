@@ -1,6 +1,4 @@
 {
-    "tftpEnabled": true,
-    "dhcpEnabled": true,
     "apiEnabled": true,
     "configurePxeLinux": true,
     "tftpOptions": {
