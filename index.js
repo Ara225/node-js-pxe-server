@@ -52,33 +52,16 @@ function initialize() {
     else {
         logger("log", "Not configuring PXE Linux")
     }
-    // Simple setup for rotating log file. Use system to redirect output, but we can't rely on it rotating it 
-    // as we could be running on Windows or Linux
-    fs.exists(options.logFile, (exists) => {
-        if (exists) {
-            logger("log", "Log file exists");
-            setInterval(() => {
-                if (fs.statSync(options.logFile).size > 50000000) {
-                    fs.writeFile(options.logFile, "Log file rotated", (err) => {
-                        logger("error", "Error rotating log file " + JSON.stringify(err))
-                    })
-                }
-                
-                var clientsKeys = Object.keys(clients)
-                for (var i = 0; i < clientsKeys.length; i++) {
-                    if ((new Date()).valueOf() - clients[clientsKeys[i]].lastActiveDate >= 21600000) {
-                        logger("log", "Removing client " + clientsKeys[i] + " from the list as it has expired");
-                        console.log(clients)
-                        delete clients[clientsKeys[i]]
-                        
-                    }
-                }
-            }, 21600000);
+    setInterval(() => {
+        var clientsKeys = Object.keys(clients)
+        for (var i = 0; i < clientsKeys.length; i++) {
+            if ((new Date()).valueOf() - clients[clientsKeys[i]].lastActiveDate >= 21600000) {
+                logger("log", "Removing client " + clientsKeys[i] + " from the list as it has expired");
+                console.log(clients)
+                delete clients[clientsKeys[i]]
+            }
         }
-        else {
-            logger("log", "Log file does not exist");
-        }
-    })
+    }, 21600000);
 }
 
 async function startAPIServer(apiOptions) {
@@ -159,9 +142,9 @@ async function startDHCPServer(dhcpOptions) {
         name: "802.1Q L2 Priority"
     });
     dhcp.addOption(134, {
-        config: "testConfig9",
+        config: "diffservCodePoint",
         type: "ASCII",
-        name: "Test Option9"
+        name: "Diffserv code point for VoIP signalling and media streams"
     });
     dhcp.addOption(135, {
         config: "Diffserv",
@@ -314,4 +297,7 @@ function configurePxeLinux(pxeLinuxOptions) {
         logger("log", "PXE Linux configuration for " + configs[config] + " generated \n" + fileContents)
     }
 }
-initialize()
+
+if ( require.main === module) {
+    initialize()
+}
