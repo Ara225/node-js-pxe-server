@@ -1,4 +1,5 @@
-"use strict"
+#!/usr/bin/env node
+"use strict";
 const dhcp = require('dhcp');
 const tftp = require('tftp');
 const fs = require("fs");

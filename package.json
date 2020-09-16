@@ -1,13 +1,15 @@
 {
   "name": "pxe-server",
   "version": "2.0.0",
-  "description": "Node based PXE server",
+  "description": "A simple JavaScript PXE server implemented with node.js. It's built on top of the the excellent dhcp and tftp npm modules. Feedback or contributions welcome. ",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js"
   },
-  "author": "",
+  "bin": {"pxe-server": "index.js"},
+  "keywords": ["pxe", "server", "network"],
+  "author": "Anna Aitchison",
   "license": "MIT",
   "dependencies": {
     "dhcp": "^0.2.19",
