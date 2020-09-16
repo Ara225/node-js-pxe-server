@@ -1,8 +1,8 @@
 "use strict"
-var dhcp = require('dhcp');
-var tftp = require('tftp');
-var fs = require("fs");
-var http = require("http");
+const dhcp = require('dhcp');
+const tftp = require('tftp');
+const fs = require("fs");
+const http = require("http");
 const url = require('url');
 
 var dhcpMessageTypes = {
@@ -29,6 +29,9 @@ var stages = [
 ];
 
 function initialize(options) {
+    if (!options) {
+        throw Error("No options provided to initialize server. See README.md for help.");
+    }
     logger("log", " PXE server started.");
     startDHCPServer(options.dhcpOptions, options.bindHost);
     startTFTPServer(options.tftpOptions);
@@ -42,7 +45,7 @@ function initialize(options) {
         configurePxeLinux(options.pxeLinuxOptions);
     }
     else {
-        logger("log", "Not configuring PXE Linux");
+        logger("log", "Not configuring PXE Linux as it is disabled");
     }
     // Function to delete clients after they've completed the process and have been inactive for a while. Without this, it'd be 
     // necessary to have the clients call home on boot or depend on boot image specific cues 

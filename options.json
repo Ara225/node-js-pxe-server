@@ -21,7 +21,6 @@
             "8.8.8.8",
             "8.8.4.4"
         ],
-        "hostname": "kacknup",
         "broadcast": "192.168.5.255",
         "server": "192.168.5.1",
         "bootFile": "tftpboot/pxelinux.0",
@@ -59,6 +58,5 @@
             }
         }
     },
-    "logFile": "./pxeServer.log",
     "bindHost": "192.168.5.1"
 }
