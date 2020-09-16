@@ -11,6 +11,10 @@
   "keywords": ["pxe", "server", "network"],
   "author": "Anna Aitchison",
   "license": "MIT",
+  "repository": {
+    "type" : "git",
+    "url" : "https://github.com/Ara225/node-js-pxe-server.git"
+  },
   "dependencies": {
     "dhcp": "^0.2.19",
     "tftp": "^0.1.2"
