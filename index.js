@@ -1,7 +1,6 @@
 "use strict"
 var dhcp = require('dhcp');
 var tftp = require('tftp');
-var options = require('./options.json');
 var fs = require("fs");
 var http = require("http");
 const url = require('url');
@@ -16,19 +15,22 @@ var dhcpMessageTypes = {
     7: 'DHCPRELEASE',
     8: 'DHCPINFORM'
 };
-var clients = {};
-var ipMap = {};
-var stages = [
-                   "firstContact",
-                   "IPAssigned",
-                   "menu",
-                   "booting",
-                   "booted"
-               ];
 
-function initialize() {
+var clients = {};
+
+var ipMap = {};
+
+var stages = [
+    "firstContact",
+    "IPAssigned",
+    "menu",
+    "booting",
+    "booted"
+];
+
+function initialize(options) {
     logger("log", " PXE server started.");
-    startDHCPServer(options.dhcpOptions);
+    startDHCPServer(options.dhcpOptions, options.bindHost);
     startTFTPServer(options.tftpOptions);
     if (options.apiEnabled) {
         startAPIServer(options.apiOptions);
@@ -79,7 +81,7 @@ async function startAPIServer(apiOptions) {
     server.listen(port)
 }
 
-async function startDHCPServer(dhcpOptions) {
+async function startDHCPServer(dhcpOptions, bindHost) {
     // This one is already defined but only has attr not config so will bug out if not redefined
     dhcp.addOption(60, {
         name: 'Vendor Class-Identifier',
@@ -147,10 +149,11 @@ async function startDHCPServer(dhcpOptions) {
     var s = dhcp.createServer(dhcpOptions);
 
     s.on('message', function (data) {
+        // Add DHCP message event to client
         var eventOptions = {
-                           "lastEvent": "DHCP Message " + dhcpMessageTypes[data.options["53"]],
-                           "mac": data.chaddr
-                       };
+            "lastEvent": "DHCP Message " + dhcpMessageTypes[data.options["53"]],
+            "mac": data.chaddr
+        };
         if (!clients[data.chaddr]) {
             eventOptions.stage = stages[0];
         }
@@ -163,9 +166,11 @@ async function startDHCPServer(dhcpOptions) {
     });
 
     s.on('bound', function (state) {
+        // Add DCHP bound event to client
         var leases = Object.keys(state);
         for (var i = 0; i < leases.length; i++) {
             if (!clients[leases[i]].ip && state[leases[i]].state == "BOUND" && clients[leases[i]].ip != state[leases[i]].address) {
+                // Add a key for the IP to the IP map and assign the MAC address to it. 
                 ipMap[state[leases[i]].address] = leases[i];
                 addEvent({
                     "stage": stages[1],
@@ -186,11 +191,13 @@ async function startDHCPServer(dhcpOptions) {
     });
 
     s.on("error", function (err, data) {
-        logger("error", "DHCP error " + JSON.stringify(err) + " " + (data ? JSON.stringify(data) : "")  + " Exiting");
+        // DHCP errors are usually major failures. Exiting like this may still be a bit too extreme though.
+        logger("error", "DHCP error " + JSON.stringify(err) + " " + (data ? JSON.stringify(data) : "") + " Exiting");
         process.exit(1);
     });
-    if (options.bindHost) {
-        s.listen(0, options.bindHost);
+    // If requested to bind to a specific host
+    if (bindHost) {
+        s.listen(0, bindHost);
     }
     else {
         s.listen();
@@ -200,6 +207,8 @@ async function startDHCPServer(dhcpOptions) {
 async function startTFTPServer(tftpOptions) {
     var server = tftp.createServer(tftpOptions);
     server.on("request", function (req) {
+        // Uses pxelinux.cfg as sign to determine what stage of the boot process client is in. If not using pxelinux,
+        // just goes from IPAssigned to booting and skips menu step
         if (ipMap[req.stats.remoteAddress]) {
             var eventOptions = {
                 "stage": (req.file.includes("pxelinux.cfg") ? stages[2] : stages[3]),
@@ -209,15 +218,18 @@ async function startTFTPServer(tftpOptions) {
             addEvent(eventOptions);
         }
         logger("log", "TFTP request. Method: " + req.method + " File: " + req.file + " Requesting IP: " + req.stats.remoteAddress);
+        // If an error occurs within the request 
         req.on("error", function (error) {
-            if (error.path){
+            // Handles file not found/permissions errors
+            if (error.path) {
                 logger("error", "Error from the TFTP request. " + JSON.stringify(error));
             }
             else {
-                logger("error", "Error from the TFTP request. " + error.name + " " + error.message +  " " +
-                (error.stack ? error.stack : "") + " " + (error.status ? error.status.toString() : ""));
+                // Other errors
+                logger("error", "Error from the TFTP request. " + error.name + " " + error.message + " " +
+                    (error.stack ? error.stack : "") + " " + (error.status ? error.status.toString() : ""));
             }
-            
+
             if (ipMap[req.stats.remoteAddress]) {
                 var eventOptions = {
                     "stage": (req.file.includes("pxelinux.cfg") ? stages[2] : stages[3]),
@@ -237,6 +249,7 @@ async function startTFTPServer(tftpOptions) {
 }
 
 function addEvent(eventOptions) {
+    // If client doesn't exist in clients list
     if (!clients[eventOptions.mac] && eventOptions.mac) {
         clients[eventOptions.mac] = {
             "stage": "",
@@ -246,6 +259,7 @@ function addEvent(eventOptions) {
             "hostname": ""
         };
     }
+    // Set values of all keys except lastActiveDate
     var eventOptionsKeys = Object.keys(eventOptions);
     for (var i = 0; i < eventOptionsKeys.length; i++) {
         if (eventOptionsKeys[i] != "mac") {
@@ -266,14 +280,17 @@ function configurePxeLinux(pxeLinuxOptions) {
     var keys = [];
     var header;
     var bootOptions;
+    // Each top level key under pxeLinuxOptions.configs represents a separate file. 
     for (var config = 0; config < configs.length; config++) {
         header = pxeLinuxOptions.configs[configs[config]].header;
         bootOptions = pxeLinuxOptions.configs[configs[config]].bootOptions;
         fileContents = "";
+        // Create file header section
         keys = Object.keys(header);
         for (var key = 0; key < keys.length; key++) {
             fileContents += keys[key] + " " + header[keys[key]] + "\n";
         }
+        // Create boot options
         for (var option = 0; option < bootOptions.length; option++) {
             if (!bootOptions[option]["label"]) {
                 logger("error", "Config option " + option.toString() + " for config " + configs[config] + " does not have a label");
@@ -285,12 +302,37 @@ function configurePxeLinux(pxeLinuxOptions) {
                 }
                 fileContents += "    " + bootOptions[option]["action"] + "\n";
             }
-        }        
+        }
         fs.writeFileSync(pxeLinuxOptions.location + "/" + configs[config], fileContents);
         logger("log", "PXE Linux configuration for " + configs[config] + " generated \n" + fileContents);
     }
 }
 
-if ( require.main === module) {
-    initialize();
+function getClients() {
+    return clients;
 }
+function getIpMap() {
+    return ipMap;
+}
+// If we're being called from a terminal
+if (require.main === module) {
+    if (process.argv.length == 3) {
+        logger("log", "Loading config from file " + process.argv[2]);
+        let options;
+        try {
+            options = require(process.argv[2]);
+        }
+        catch (e) {
+            logger("error", "Error loading config from file " + process.argv[2]);
+            throw e;
+        }
+        initialize(options);
+    }
+    else {
+        logger("error", "Please include a path to an options file. See README.md for details.");
+        process.exit(3);
+    }
+}
+module.exports.initialize = initialize
+module.exports.getClients = getClients
+module.exports.getIpMap = getIpMap
