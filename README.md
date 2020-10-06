@@ -12,7 +12,7 @@ See <https://tools.ietf.org/html/rfc4578> for more details on the PXE sever prot
 
 # Usage
 ## Command line
-Simply call the module (run pxe-server or npx pxe-server if installed with npm) at the command line with a path to to an options file (see below) as the first and only argument. 
+Simply call the module (run node index.js or npx pxe-server if installed with npm) at the command line with a path to to an options file (see below) as the first and only argument. 
 
 ## JavaScript API
 
