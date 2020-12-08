@@ -137,7 +137,3 @@ This tool is designed to load options from a JSON file as there will be rather a
 TFTP request aborted or file not found errors are relatively normal errors. Please note that this module needs to be run as root on Linux or as member of the Administrators group on Windows due to the need to bind to ports below 1024 for DHCP and TFTP.
 
 Aside from this, most problems would be due to the underlying DHCP or TFTP modules.
-
-# Todo
-* Better way of handling errors and events when invoked from a JavaScript program
-* Better command-line arg handling
